@@ -1,0 +1,246 @@
+class Snake {
+constructor(canvas) {
+this.canvas = canvas;
+this.ctx = canvas.getContext('2d');
+this.gridSize = 20;
+this.maxPlayers = 2; // Maximal zwei Spieler im Multiplayer
+this.snakes = [
+[{ x: 5, y: 5 }],
+[{ x: 25, y: 25 }]
+];
+this.directions = ['right', 'left']; // Initiale Richtungen für beide Spieler
+this.foods = [this.generateFood(), this.generateFood()]; // Für beide Spieler gibt es Essen
+this.scores = [0, 0]; // Punkte für beide Spieler
+this.activePlayers = 1; // Standardmäßig nur 1 Spieler
+this.gameOver = false;
+this.gameLoop = null;
+this.isMultiplayer = false;
+
+// Initialize game speed
+this.baseSpeed = 150;
+this.speed = this.baseSpeed;
+this.lastTime = 0;
+
+// Bind event handlers
+this.handleKeyPress = this.handleKeyPress.bind(this);
+document.addEventListener('keydown', this.handleKeyPress);
+
+// Get DOM elements
+this.score1Element = document.getElementById('score1');
+this.score2Element = document.getElementById('score2');
+this.gameOverElement = document.getElementById('gameOver');
+this.startButton = document.getElementById('startButton');
+this.gameContainer = document.getElementById('gameContainer');
+this.modeSelection = document.getElementById('modeSelection');
+this.player2Score = document.getElementById('player2Score');
+this.player2Controls = document.getElementById('player2Controls');
+
+// Add button listeners
+this.startButton.addEventListener('click', () => this.startGame());
+document.getElementById('singlePlayerBtn').addEventListener('click', () => this.setGameMode(false));
+document.getElementById('multiPlayerBtn').addEventListener('click', () => {
+this.setGameMode(true);
+this.modeSelection.classList.add('d-none');
+this.gameContainer.classList.remove('d-none');
+});
+document.getElementById('onlineMultiPlayerBtn').addEventListener('click', () => {
+this.setGameMode(true);
+this.modeSelection.classList.add('d-none');
+document.getElementById('mobileLobby').classList.remove('d-none');
+});
+document.getElementById('backToMenu').addEventListener('click', () => this.showModeSelection());
+
+// Animation frame
+this.animate = this.animate.bind(this);
+}
+
+setGameMode(isMultiplayer) {
+this.isMultiplayer = isMultiplayer;
+this.modeSelection.classList.add('d-none');
+this.gameContainer.classList.remove('d-none');
+
+if (isMultiplayer) {
+this.player2Score.classList.remove('d-none');
+this.player2Controls.classList.remove('d-none');
+this.activePlayers = 2;
+} else {
+this.player2Score.classList.add('d-none');
+this.player2Controls.classList.add('d-none');
+this.activePlayers = 1;
+}
+
+this.startGame();
+}
+
+showModeSelection() {
+this.gameContainer.classList.add('d-none');
+this.modeSelection.classList.remove('d-none');
+this.gameOver = true;
+}
+
+startGame() {
+// Reset game state
+this.snakes = [
+[{ x: 5, y: 5 }],
+[{ x: 25, y: 25 }]
+];
+this.directions = ['right', 'left'];
+this.scores = [0, 0];
+this.gameOver = false;
+this.foods = [this.generateFood(), this.generateFood()];
+this.score1Element.textContent = '0';
+this.score2Element.textContent = '0';
+this.gameOverElement.classList.add('d-none');
+this.startButton.textContent = 'Restart Game';
+this.lastTime = performance.now();
+
+// Start animation loop
+requestAnimationFrame(this.animate);
+}
+
+generateFood() {
+let newFood;
+do {
+newFood = {
+x: Math.floor(Math.random() * (this.canvas.width / this.gridSize)),
+y: Math.floor(Math.random() * (this.canvas.height / this.gridSize))
+};
+} while (
+this.snakes[0].some(segment => segment.x === newFood.x && segment.y === newFood.y) ||
+(this.isMultiplayer && this.snakes[1].some(segment => segment.x === newFood.x && segment.y === newFood.y)) ||
+this.foods.some(food => food.x === newFood.x && food.y === newFood.y)
+);
+return newFood;
+}
+
+handleKeyPress(event) {
+const key = event.key;
+
+if (this.gameOver && key === ' ') {
+this.startGame();
+return;
+}
+
+// Player 1 controls (Arrow keys)
+const directions1 = {
+'ArrowUp': 'up',
+'ArrowDown': 'down',
+'ArrowLeft': 'left',
+'ArrowRight': 'right'
+};
+
+// Player 2 controls (WASD)
+const directions2 = {
+'w': 'up',
+'s': 'down',
+'a': 'left',
+'d': 'right'
+};
+
+const opposites = {
+'up': 'down',
+'down': 'up',
+'left': 'right',
+'right': 'left'
+};
+
+// Handle Player 1 input
+if (directions1[key]) {
+const newDirection = directions1[key];
+if (opposites[newDirection] !== this.directions[0]) {
+this.directions[0] = newDirection;
+}
+event.preventDefault();
+}
+
+// Handle Player 2 input (only in multiplayer mode)
+if (this.isMultiplayer && directions2[key.toLowerCase()]) {
+const newDirection = directions2[key.toLowerCase()];
+if (opposites[newDirection] !== this.directions[1]) {
+this.directions[1] = newDirection;
+}
+event.preventDefault();
+}
+}
+
+update() {
+if (this.gameOver) return;
+
+// Calculate time delta and update if enough time has passed
+const now = performance.now();
+const deltaTime = now - this.lastTime;
+if (deltaTime < this.speed) return;
+this.lastTime = now;
+
+// Update both snakes
+for (let i = 0; i < this.activePlayers; i++) {
+const head = {...this.snakes[i][0]};
+switch (this.directions[i]) {
+case 'up': head.y--; break;
+case 'down': head.y++; break;
+case 'left': head.x--; break;
+case 'right': head.x++; break;
+}
+
+// Collision detection with walls
+if (head.x < 0 || head.x >= this.canvas.width / this.gridSize ||
+head.y < 0 || head.y >= this.canvas.height / this.gridSize) {
+this.endGame();
+return;
+}
+
+// Collision detection with other snake's body
+for (let j = 0; j < this.activePlayers; j++) {
+if (i !== j && this.snakes[j].some(segment => segment.x === head.x && segment.y === head.y)) {
+this.endGame();
+return;
+}
+}
+
+// Add new head and remove tail
+this.snakes[i].unshift(head);
+if (head.x === this.foods[i].x && head.y === this.foods[i].y) {
+this.scores[i]++;
+this.foods[i] = this.generateFood(); // New food position
+} else {
+this.snakes[i].pop(); // Remove the tail
+}
+}
+}
+
+endGame() {
+this.gameOver = true;
+this.gameOverElement.classList.remove('d-none');
+this.startButton.textContent = 'Start New Game';
+}
+
+animate() {
+this.update();
+this.draw();
+requestAnimationFrame(this.animate);
+}
+
+draw() {
+this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+// Draw the snakes
+this.snakes.forEach((snake, index) => {
+this.ctx.fillStyle = index === 0 ? 'green' : 'blue';
+snake.forEach(segment => {
+this.ctx.fillRect(segment.x * this.gridSize, segment.y * this.gridSize, this.gridSize, this.gridSize);
+});
+});
+
+// Draw the food
+this.foods.forEach((food, index) => {
+this.ctx.fillStyle = 'red';
+this.ctx.fillRect(food.x * this.gridSize, food.y * this.gridSize, this.gridSize, this.gridSize);
+});
+
+// Draw the scores
+this.score1Element.textContent = this.scores[0];
+if (this.isMultiplayer) {
+this.score2Element.textContent = this.scores[1];
+}
+}
+}
